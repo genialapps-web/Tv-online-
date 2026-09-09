@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sintonía — Reproductor M3U</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.15/hls.min.js"></script>
+<style>
+  :root{
+    --bg:#0e1015;
+    --panel:#161923;
+    --panel-2:#1d212c;
+    --line:#2a2f3c;
+    --text:#eae8e2;
+    --muted:#8c90a0;
+    --amber:#f2a93b;
+    --amber-dim:#8a6323;
+    --teal:#3fa796;
+    --violet:#9d8cf2;
+    --danger:#e2634f;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;
+    min-height:100vh;
+  }
+  ::selection{background:var(--amber);color:#101010;}
+
+  /* ---------- top bar ---------- */
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    padding:22px 24px 16px;
+    border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .brand{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:22px;
+    letter-spacing:-0.02em;
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+  }
+  .brand .dial{
+    color:var(--amber);
+    font-variant-numeric:tabular-nums;
+  }
+  .brand small{
+    font-family:'Inter',sans-serif;
+    font-weight:400;
+    font-size:12.5px;
+    color:var(--muted);
+  }
+  nav.tabs{
+    display:flex;
+    gap:4px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:3px;
+  }
+  nav.tabs button{
+    border:none;
+    background:transparent;
+    color:var(--muted);
+    font-family:'Inter',sans-serif;
+    font-size:13.5px;
+    font-weight:500;
+    padding:8px 14px;
+    border-radius:7px;
+    cursor:pointer;
+    transition:background .15s, color .15s;
+  }
+  nav.tabs button.active{
+    background:var(--amber);
+    color:#161923;
+  }
+  nav.tabs button:not(.active):hover{
+    color:var(--text);
+  }
+
+  /* ---------- layout ---------- */
+  .layout{
+    display:grid;
+    grid-template-columns:340px 1fr;
+    gap:0;
+    min-height:calc(100vh - 76px);
+  }
+  @media (max-width:820px){
+    .layout{grid-template-columns:1fr;}
+    aside{order:2;border-right:none !important;border-top:1px solid var(--line);}
+    main{order:1;}
+  }
+
+  /* ---------- sidebar (channel list) ---------- */
+  aside{
+    border-right:1px solid var(--line);
+    padding:18px 16px 40px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+
+  .cat-tabs{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:6px;
+  }
+  .cat-tab{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:2px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:9px;
+    padding:9px 4px 8px;
+    cursor:pointer;
+    color:var(--muted);
+  }
+  .cat-tab .lbl{font-size:12px;font-weight:500;}
+  .cat-tab .cnt{font-size:14px;font-weight:700;font-family:'Space Grotesk',sans-serif;color:var(--text);font-variant-numeric:tabular-nums;}
+  .cat-tab.active{border-color:var(--amber-dim);background:var(--panel-2);}
+  .cat-tab.active .lbl{color:var(--amber);}
+  .cat-tab[data-cat="live"].active .cnt{color:var(--teal);}
+  .cat-tab[data-cat="movie"].active .cnt{color:var(--amber);}
+  .cat-tab[data-cat="series"].active .cnt{color:var(--violet);}
+
+  input.search{
+    width:100%;
+    background:var(--panel);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:9px 12px;
+    border-radius:8px;
+    font-size:13.5px;
+    font-family:'Inter',sans-serif;
+  }
+  input.search:focus{outline:1px solid var(--amber);}
+  input.search::placeholder{color:var(--muted);}
+
+  .channel-list{
+    list-style:none;
+    margin:0;
+    padding:0;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    overflow-y:auto;
+    max-height:66vh;
+  }
+  .channel-list::-webkit-scrollbar{width:6px;}
+  .channel-list::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+
+  .chan{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:9px 10px;
+    border-radius:8px;
+    cursor:pointer;
+    border:1px solid transparent;
+  }
+  .chan:hover{background:var(--panel);}
+  .chan.playing{
+    background:var(--panel-2);
+    border-color:var(--amber-dim);
+  }
+  .chan .idx{
+    font-size:11px;
+    color:var(--muted);
+    width:26px;
+    flex:none;
+    font-variant-numeric:tabular-nums;
+  }
+  .chan.playing .idx{color:var(--amber);}
+  .chan img.logo{
+    width:26px;height:26px;border-radius:5px;object-fit:cover;flex:none;background:var(--panel-2);
+  }
+  .chan .meta{min-width:0;}
+  .chan .name{
+    font-size:13.5px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .chan .group{
+    font-size:11px;
+    color:var(--muted);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  /* series groups */
+  .show-block{border-bottom:1px solid var(--line);}
+  .show-block:last-child{border-bottom:none;}
+  .show-header{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:10px 8px;
+    cursor:pointer;
+    border-radius:8px;
+  }
+  .show-header:hover{background:var(--panel);}
+  .show-header .chev{
+    color:var(--muted);
+    font-size:10px;
+    transition:transform .15s;
+    flex:none;
+    width:10px;
+  }
+  .show-header.open .chev{transform:rotate(90deg);}
+  .show-header .sname{
+    font-size:13.5px;
+    flex:1;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .show-header .ecount{
+    font-size:11px;
+    color:var(--violet);
+    border:1px solid #4a4270;
+    padding:1px 7px;
+    border-radius:20px;
+    flex:none;
+    font-variant-numeric:tabular-nums;
+  }
+  .episode-list{
+    list-style:none;
+    margin:0 0 6px;
+    padding:0 0 0 22px;
+    display:flex;
+    flex-direction:column;
+    gap:1px;
+  }
+  .episode-item{
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    padding:7px 8px;
+    border-radius:7px;
+    cursor:pointer;
+    font-size:12.5px;
+  }
+  .episode-item:hover{background:var(--panel);}
+  .episode-item.playing{background:var(--panel-2);color:var(--amber);}
+  .episode-item .se{
+    color:var(--muted);
+    font-variant-numeric:tabular-nums;
+    flex:none;
+    font-size:11.5px;
+  }
+  .episode-item.playing .se{color:var(--amber);}
+  .episode-item .etitle{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+
+  .empty-list{
+    color:var(--muted);
+    font-size:13px;
+    line-height:1.6;
+    padding:18px 6px;
+    border:1px dashed var(--line);
+    border-radius:10px;
+  }
+  .empty-list b{color:var(--text);}
+
+  /* ---------- main / player ---------- */
+  main{
+    padding:24px 28px 40px;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+  }
+  .player-wrap{
+    background:#000;
+    border:1px solid var(--line);
+    border-radius:12px;
+    overflow:hidden;
+    aspect-ratio:16/9;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+  }
+  video{
+    width:100%;
+    height:100%;
+    background:#000;
+  }
+  .placeholder{
+    color:var(--muted);
+    text-align:center;
+    font-size:14px;
+    padding:20px;
+    max-width:340px;
+  }
+  .placeholder .dial-icon{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:34px;
+    color:var(--amber-dim);
+    margin-bottom:8px;
+  }
+  .status-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .now-playing h1{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:19px;
+    font-weight:600;
+    margin:0 0 2px;
+  }
+  .now-playing .src-url{
+    font-size:12px;
+    color:var(--muted);
+    word-break:break-all;
+  }
+  .now-playing .cat-flag{
+    display:inline-block;
+    font-size:11px;
+    margin-right:8px;
+    padding:2px 8px;
+    border-radius:20px;
+    border:1px solid var(--line);
+    color:var(--muted);
+    vertical-align:middle;
+  }
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:12px;
+    padding:5px 10px;
+    border-radius:20px;
+    border:1px solid var(--line);
+    color:var(--muted);
+    flex:none;
+  }
+  .badge.live{border-color:var(--teal);color:var(--teal);}
+  .badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .badge.err{border-color:var(--danger);color:var(--danger);}
+
+  .hint-box{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 14px;
+    font-size:12.5px;
+    color:var(--muted);
+    line-height:1.55;
+  }
+
+  /* ---------- admin panel ---------- */
+  .admin-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:18px;
+  }
+  @media (max-width:820px){.admin-grid{grid-template-columns:1fr;}}
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:20px;
+  }
+  .card h3{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:15px;
+    margin:0 0 4px;
+    font-weight:600;
+  }
+  .card p.sub{
+    font-size:12.5px;
+    color:var(--muted);
+    margin:0 0 16px;
+    line-height:1.5;
+  }
+  label{
+    display:block;
+    font-size:12px;
+    color:var(--muted);
+    margin:0 0 6px;
+  }
+  .field{margin-bottom:14px;}
+  input[type=text], input[type=url], textarea, select{
+    width:100%;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:10px 12px;
+    border-radius:8px;
+    font-size:13.5px;
+    font-family:'Inter',sans-serif;
+    resize:vertical;
+  }
+  textarea{min-height:120px;font-family:ui-monospace,monospace;font-size:12px;line-height:1.5;}
+  input:focus, textarea:focus, select:focus{outline:1px solid var(--amber);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+  @media (max-width:520px){.row2,.row3{grid-template-columns:1fr;}}
+
+  button.primary{
+    background:var(--amber);
+    color:#171923;
+    border:none;
+    font-weight:600;
+    font-size:13.5px;
+    padding:10px 18px;
+    border-radius:8px;
+    cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  button.primary:hover{filter:brightness(1.08);}
+  button.primary:disabled{opacity:.5;cursor:default;}
+  button.ghost{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--text);
+    font-size:13px;
+    padding:9px 14px;
+    border-radius:8px;
+    cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  button.ghost:hover{border-color:var(--muted);}
+  .btn-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .msg{font-size:12.5px;margin-top:10px;line-height:1.5;}
+  .msg.ok{color:var(--teal);}
+  .msg.err{color:var(--danger);}
+
+  .saved-list{
+    list-style:none;padding:0;margin:14px 0 0;
+    display:flex;flex-direction:column;gap:6px;
+    max-height:220px;overflow-y:auto;
+  }
+  .saved-list li{
+    display:flex;align-items:center;justify-content:space-between;
+    background:var(--panel-2);border:1px solid var(--line);
+    padding:8px 10px;border-radius:7px;font-size:12.5px;gap:8px;
+  }
+  .saved-list li span.u{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);
+  }
+  .saved-list li button{
+    background:transparent;border:none;color:var(--danger);cursor:pointer;font-size:12px;flex:none;
+  }
+
+  .format-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .format-tags span{
+    font-size:11px;color:var(--muted);
+    border:1px solid var(--line);
+    padding:3px 8px;border-radius:6px;
+  }
+
+  .breakdown{
+    display:flex;gap:14px;margin-top:14px;flex-wrap:wrap;
+  }
+  .breakdown .bitem{
+    font-size:12px;color:var(--muted);
+    display:flex;align-items:center;gap:6px;
+  }
+  .breakdown .bitem b{color:var(--text);font-family:'Space Grotesk',sans-serif;}
+  .breakdown .swatch{width:8px;height:8px;border-radius:50%;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="dial">◐</span>Sintonía<small>reproductor M3U · todos los formatos</small></div>
+  <nav class="tabs">
+    <button class="active" data-tab="player">Reproductor</button>
+    <button data-tab="admin">Admin</button>
+  </nav>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="cat-tabs" id="catTabs">
+      <div class="cat-tab active" data-cat="live">
+        <span class="cnt" id="cntLive">0</span>
+        <span class="lbl">En vivo</span>
+      </div>
+      <div class="cat-tab" data-cat="movie">
+        <span class="cnt" id="cntMovie">0</span>
+        <span class="lbl">Películas</span>
+      </div>
+      <div class="cat-tab" data-cat="series">
+        <span class="cnt" id="cntSeries">0</span>
+        <span class="lbl">Series</span>
+      </div>
+    </div>
+    <input class="search" id="searchInput" type="text" placeholder="Buscar…">
+    <ul class="channel-list" id="channelList"></ul>
+  </aside>
+
+  <main>
+    <!-- PLAYER TAB -->
+    <section id="tab-player">
+      <div class="player-wrap">
+        <video id="video" controls playsinline></video>
+        <div class="placeholder" id="placeholder">
+          <div class="dial-icon">◐</div>
+          Todavía no hay nada sintonizado.<br>
+          Cargá una lista M3U o una URL directa desde <b>Admin</b>.
+        </div>
+      </div>
+      <div class="status-row">
+        <div class="now-playing">
+          <h1><span class="cat-flag" id="npCat" style="display:none;"></span><span id="npName">Sin señal</span></h1>
+          <div class="src-url" id="npUrl"></div>
+        </div>
+        <span class="badge" id="statusBadge"><span class="dot"></span><span id="statusText">Inactivo</span></span>
+      </div>
+      <div class="hint-box">
+        Los canales se clasifican automáticamente en <b>En vivo</b>, <b>Películas</b> y <b>Series</b> según el grupo (<code>group-title</code>) y el nombre de cada entrada (por ejemplo <code>S01E02</code> o <code>1x02</code> agrupa episodios bajo su serie). Se reproduce cualquier formato que el navegador soporte de forma nativa (MP4, WebM, OGG) y streams HLS (<code>.m3u8</code>) vía hls.js.
+      </div>
+    </section>
+
+    <!-- ADMIN TAB -->
+    <section id="tab-admin" style="display:none;">
+      <div class="admin-grid">
+
+        <div class="card">
+          <h3>Cargar lista M3U</h3>
+          <p class="sub">Pegá la URL de una lista .m3u / .m3u8. Se intenta descargar, parsear y clasificar automáticamente.</p>
+          <div class="field">
+            <label for="m3uUrl">URL de la lista</label>
+            <input type="url" id="m3uUrl" placeholder="https://ejemplo.com/lista.m3u">
+          </div>
+          <div class="btn-row">
+            <button class="primary" id="loadUrlBtn">Cargar lista</button>
+            <button class="ghost" id="clearListBtn">Vaciar todo</button>
+          </div>
+          <div class="msg" id="urlMsg"></div>
+
+          <div class="field" style="margin-top:18px;">
+            <label for="m3uPaste">O pegá el contenido M3U directamente</label>
+            <textarea id="m3uPaste" placeholder="#EXTM3U
+#EXTINF:-1 tvg-name=&quot;Canal 1&quot; group-title=&quot;General&quot;,Canal 1
+https://ejemplo.com/canal1.m3u8"></textarea>
+          </div>
+          <div class="btn-row">
+            <button class="primary" id="parsePasteBtn">Parsear texto pegado</button>
+          </div>
+          <div class="msg" id="pasteMsg"></div>
+
+          <div class="breakdown" id="breakdown">
+            <span class="bitem"><span class="swatch" style="background:var(--teal);"></span>En vivo: <b id="bLive">0</b></span>
+            <span class="bitem"><span class="swatch" style="background:var(--amber);"></span>Películas: <b id="bMovie">0</b></span>
+            <span class="bitem"><span class="swatch" style="background:var(--violet);"></span>Series (episodios): <b id="bSeries">0</b></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Agregar canal / video suelto</h3>
+          <p class="sub">Sumá una URL individual de cualquier formato: MP4, WebM, MOV, MKV, HLS (.m3u8), etc.</p>
+          <div class="field">
+            <label for="chName">Nombre</label>
+            <input type="text" id="chName" placeholder="Ej: Avatar (2009)  ·  o  Serie X S01E03">
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label for="chUrl">URL del video / stream</label>
+              <input type="text" id="chUrl" placeholder="https://ejemplo.com/video.mp4">
+            </div>
+            <div class="field">
+              <label for="chGroup">Grupo (opcional)</label>
+              <input type="text" id="chGroup" placeholder="Deportes, Películas, Series…">
+            </div>
+          </div>
+          <div class="field">
+            <label for="chCat">Categoría</label>
+            <select id="chCat">
+              <option value="auto">Detectar automáticamente</option>
+              <option value="live">En vivo</option>
+              <option value="movie">Película</option>
+              <option value="series">Serie</option>
+            </select>
+          </div>
+          <div class="btn-row">
+            <button class="primary" id="addChannelBtn">Agregar canal</button>
+          </div>
+          <div class="msg" id="addMsg"></div>
+
+          <div class="format-tags">
+            <span>MP4</span><span>WebM</span><span>OGG/OGV</span><span>MOV</span>
+            <span>HLS · .m3u8</span><span>MKV*</span>
+          </div>
+          <p class="sub" style="margin-top:10px;margin-bottom:0;">*MKV depende de los códecs internos y del soporte del navegador — no todos los MKV son reproducibles en la web.</p>
+
+          <h3 style="margin-top:22px;">Listas guardadas</h3>
+          <p class="sub">Se guardan localmente en tu sesión de Claude para la próxima vez.</p>
+          <ul class="saved-list" id="savedList"></ul>
+        </div>
+
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const video = document.getElementById('video');
+  const placeholder = document.getElementById('placeholder');
+  const channelListEl = document.getElementById('channelList');
+  const searchInput = document.getElementById('searchInput');
+  const npName = document.getElementById('npName');
+  const npUrl = document.getElementById('npUrl');
+  const npCat = document.getElementById('npCat');
+  const statusBadge = document.getElementById('statusBadge');
+  const statusText = document.getElementById('statusText');
+
+  let channels = [];   // {name, url, group, logo, category}
+  let currentIndex = -1;
+  let currentCategory = 'live';
+  let hls = null;
+  const expandedShows = new Set();
+
+  const CAT_LABEL = {live:'En vivo', movie:'Película', series:'Serie'};
+
+  // ---------- classification ----------
+  const SERIES_GROUP_KW = ['serie','series','temporada','season'];
+  const MOVIE_GROUP_KW = ['pelicul','películ','movie','film','vod','cine'];
+  const EPISODE_REGEX = /\bs\d{1,2}\s*e\d{1,2}\b|\b\d{1,2}\s*x\s*\d{1,2}\b|temporada\s*\d+[^\d]{0,15}cap/i;
+
+  function categorize(name, group){
+    const n = (name||'').toLowerCase();
+    const g = (group||'').toLowerCase();
+    if(SERIES_GROUP_KW.some(k=>g.includes(k)) || EPISODE_REGEX.test(n)) return 'series';
+    if(MOVIE_GROUP_KW.some(k=>g.includes(k))) return 'movie';
+    return 'live';
+  }
+
+  function parseEpisode(name){
+    let m;
+    m = name.match(/^(.*?)[\s\-\|:]*\(?[Ss](\d{1,2})[\s.\-]?[Ee](\d{1,2})\)?[\s\-\|:]*(.*)$/);
+    if(m) return {show:(m[1]||'').trim(), season:parseInt(m[2],10), episode:parseInt(m[3],10), title:(m[4]||'').trim()};
+    m = name.match(/^(.*?)[\s\-\|:]*\(?(\d{1,2})\s*x\s*(\d{1,2})\)?[\s\-\|:]*(.*)$/i);
+    if(m) return {show:(m[1]||'').trim(), season:parseInt(m[2],10), episode:parseInt(m[3],10), title:(m[4]||'').trim()};
+    m = name.match(/^(.*?)[\s\-\|:]*Temporada\s*(\d{1,2})[^\d]*?Cap(?:i|í)tulo\.?\s*(\d{1,2})[\s\-\|:]*(.*)$/i);
+    if(m) return {show:(m[1]||'').trim(), season:parseInt(m[2],10), episode:parseInt(m[3],10), title:(m[4]||'').trim()};
+    return null;
+  }
+
+  // ---------- tabs (player/admin) ----------
+  document.querySelectorAll('nav.tabs button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      document.getElementById('tab-player').style.display = tab==='player' ? '' : 'none';
+      document.getElementById('tab-admin').style.display = tab==='admin' ? '' : 'none';
+    });
+  });
+
+  // ---------- category tabs ----------
+  document.querySelectorAll('.cat-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('.cat-tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      currentCategory = tab.dataset.cat;
+      renderChannelList();
+    });
+  });
+
+  // ---------- storage (persist across sessions) ----------
+  async function saveChannels(){
+    try{ await window.storage.set('channels', JSON.stringify(channels), false); }catch(e){}
+  }
+  async function saveSources(list){
+    try{ await window.storage.set('sources', JSON.stringify(list), false); }catch(e){}
+  }
+  async function loadPersisted(){
+    try{
+      const c = await window.storage.get('channels', false);
+      if(c && c.value) channels = JSON.parse(c.value);
+    }catch(e){}
+    try{
+      const s = await window.storage.get('sources', false);
+      if(s && s.value) renderSavedSources(JSON.parse(s.value));
+      else renderSavedSources([]);
+    }catch(e){ renderSavedSources([]); }
+    renderChannelList();
+  }
+  async function getSources(){
+    try{
+      const s = await window.storage.get('sources', false);
+      if(s && s.value) return JSON.parse(s.value);
+    }catch(e){}
+    return [];
+  }
+
+  // ---------- M3U parsing ----------
+  function parseM3U(text){
+    const lines = text.split(/\r?\n/);
+    const out = [];
+    let pending = null;
+    for(let raw of lines){
+      const line = raw.trim();
+      if(!line) continue;
+      if(line.startsWith('#EXTM3U')) continue;
+      if(line.startsWith('#EXTINF')){
+        const commaIdx = line.indexOf(',');
+        const attrsPart = commaIdx !== -1 ? line.substring(0, commaIdx) : line;
+        const name = commaIdx !== -1 ? line.substring(commaIdx+1).trim() : 'Canal';
+        const logoMatch = attrsPart.match(/tvg-logo="([^"]*)"/i);
+        const groupMatch = attrsPart.match(/group-title="([^"]*)"/i);
+        pending = {
+          name: name || 'Canal',
+          logo: logoMatch ? logoMatch[1] : '',
+          group: groupMatch ? groupMatch[1] : ''
+        };
+      } else if(line.startsWith('#')){
+        continue;
+      } else {
+        const url = line;
+        if(pending){
+          out.push({name: pending.name, url, group: pending.group, logo: pending.logo, category: categorize(pending.name, pending.group)});
+          pending = null;
+        } else {
+          const nm = url.split('/').pop() || 'Canal';
+          out.push({name: nm, url, group:'', logo:'', category: categorize(nm,'')});
+        }
+      }
+    }
+    return out;
+  }
+
+  function setMsg(el, text, ok){
+    el.textContent = text;
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  function updateBreakdown(){
+    document.getElementById('bLive').textContent = channels.filter(c=>c.category==='live').length;
+    document.getElementById('bMovie').textContent = channels.filter(c=>c.category==='movie').length;
+    document.getElementById('bSeries').textContent = channels.filter(c=>c.category==='series').length;
+  }
+
+  // ---------- loading a playlist URL ----------
+  const loadUrlBtn = document.getElementById('loadUrlBtn');
+  const m3uUrlInput = document.getElementById('m3uUrl');
+  const urlMsg = document.getElementById('urlMsg');
+
+  loadUrlBtn.addEventListener('click', async ()=>{
+    const url = m3uUrlInput.value.trim();
+    if(!url){ setMsg(urlMsg, 'Pegá una URL primero.', false); return; }
+    loadUrlBtn.disabled = true;
+    loadUrlBtn.textContent = 'Cargando…';
+    try{
+      const res = await fetch(url, {mode:'cors'});
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      const parsed = parseM3U(text);
+      if(parsed.length === 0){
+        setMsg(urlMsg, 'Se descargó el archivo pero no se encontraron canales válidos.', false);
+      } else {
+        channels = channels.concat(parsed);
+        renderChannelList();
+        saveChannels();
+        const sources = await getSources();
+        sources.unshift({url, addedAt: Date.now()});
+        await saveSources(sources.slice(0,20));
+        renderSavedSources(sources.slice(0,20));
+        const nm = parsed.filter(c=>c.category==='movie').length;
+        const ns = parsed.filter(c=>c.category==='series').length;
+        const nl = parsed.filter(c=>c.category==='live').length;
+        setMsg(urlMsg, parsed.length + ' entradas agregadas — ' + nl + ' en vivo, ' + nm + ' películas, ' + ns + ' episodios de series.', true);
+      }
+    }catch(err){
+      setMsg(urlMsg, 'No se pudo descargar la lista (posible bloqueo CORS del servidor). Probá pegar el contenido directamente abajo.', false);
+    }
+    loadUrlBtn.disabled = false;
+    loadUrlBtn.textContent = 'Cargar lista';
+  });
+
+  document.getElementById('clearListBtn').addEventListener('click', ()=>{
+    channels = [];
+    expandedShows.clear();
+    renderChannelList();
+    saveChannels();
+    resetPlayer();
+  });
+
+  // ---------- parse pasted text ----------
+  const parsePasteBtn = document.getElementById('parsePasteBtn');
+  const pasteMsg = document.getElementById('pasteMsg');
+  parsePasteBtn.addEventListener('click', ()=>{
+    const text = document.getElementById('m3uPaste').value;
+    if(!text.trim()){ setMsg(pasteMsg, 'Pegá el contenido de una lista M3U primero.', false); return; }
+    const parsed = parseM3U(text);
+    if(parsed.length === 0){
+      setMsg(pasteMsg, 'No se encontraron canales en ese texto.', false);
+    } else {
+      channels = channels.concat(parsed);
+      renderChannelList();
+      saveChannels();
+      setMsg(pasteMsg, parsed.length + ' entradas agregadas correctamente.', true);
+    }
+  });
+
+  // ---------- add single channel ----------
+  document.getElementById('addChannelBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('chName').value.trim();
+    const url = document.getElementById('chUrl').value.trim();
+    const group = document.getElementById('chGroup').value.trim();
+    const catSel = document.getElementById('chCat').value;
+    const addMsg = document.getElementById('addMsg');
+    if(!name || !url){ setMsg(addMsg, 'Completá nombre y URL.', false); return; }
+    const category = catSel === 'auto' ? categorize(name, group) : catSel;
+    channels.push({name, url, group, logo:'', category});
+    renderChannelList();
+    saveChannels();
+    document.getElementById('chName').value = '';
+    document.getElementById('chUrl').value = '';
+    document.getElementById('chGroup').value = '';
+    document.getElementById('chCat').value = 'auto';
+    setMsg(addMsg, 'Canal agregado como "' + CAT_LABEL[category] + '".', true);
+  });
+
+  function renderSavedSources(list){
+    const el = document.getElementById('savedList');
+    el.innerHTML = '';
+    if(!list || list.length === 0){
+      el.innerHTML = '<li style="color:var(--muted);border:none;background:transparent;padding:2px;">Ninguna todavía.</li>';
+      return;
+    }
+    list.forEach((s, i)=>{
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.className = 'u';
+      span.textContent = s.url;
+      const btns = document.createElement('div');
+      btns.style.display = 'flex';
+      btns.style.gap = '8px';
+      const reload = document.createElement('button');
+      reload.textContent = 'Recargar';
+      reload.style.color = 'var(--amber)';
+      reload.addEventListener('click', ()=>{
+        m3uUrlInput.value = s.url;
+        loadUrlBtn.click();
+      });
+      const del = document.createElement('button');
+      del.textContent = '✕';
+      del.addEventListener('click', async ()=>{
+        const sources = await getSources();
+        sources.splice(i,1);
+        await saveSources(sources);
+        renderSavedSources(sources);
+      });
+      btns.appendChild(reload);
+      btns.appendChild(del);
+      li.appendChild(span);
+      li.appendChild(btns);
+      el.appendChild(li);
+    });
+  }
+
+  // ---------- channel list rendering ----------
+  function renderChannelList(){
+    const q = (searchInput.value || '').toLowerCase();
+
+    document.getElementById('cntLive').textContent = channels.filter(c=>c.category==='live').length;
+    document.getElementById('cntMovie').textContent = channels.filter(c=>c.category==='movie').length;
+    document.getElementById('cntSeries').textContent = channels.filter(c=>c.category==='series').length;
+    updateBreakdown();
+
+    channelListEl.innerHTML = '';
+
+    if(currentCategory === 'series'){
+      renderSeriesList(q);
+      return;
+    }
+
+    const list = channels
+      .map((c,i)=>({c,i}))
+      .filter(({c}) => c.category === currentCategory)
+      .filter(({c}) => c.name.toLowerCase().includes(q) || (c.group||'').toLowerCase().includes(q));
+
+    if(list.length === 0){
+      const li = document.createElement('li');
+      li.className = 'empty-list';
+      const totalInCat = channels.filter(c=>c.category===currentCategory).length;
+      li.innerHTML = totalInCat === 0
+        ? 'No hay nada en <b>' + CAT_LABEL[currentCategory] + '</b> todavía. Cargá una lista en <b>Admin</b>.'
+        : 'Sin resultados para esa búsqueda.';
+      channelListEl.appendChild(li);
+      return;
+    }
+
+    list.forEach(({c,i}, pos)=>{
+      const li = document.createElement('li');
+      li.className = 'chan' + (currentIndex===i ? ' playing' : '');
+      const idx = document.createElement('span');
+      idx.className = 'idx';
+      idx.textContent = String(pos+1).padStart(2,'0');
+      li.appendChild(idx);
+      if(c.logo){
+        const img = document.createElement('img');
+        img.className = 'logo';
+        img.src = c.logo;
+        img.loading = 'lazy';
+        img.onerror = ()=>{ img.style.display='none'; };
+        li.appendChild(img);
+      }
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const nm = document.createElement('div');
+      nm.className = 'name';
+      nm.textContent = c.name;
+      meta.appendChild(nm);
+      if(c.group){
+        const gr = document.createElement('div');
+        gr.className = 'group';
+        gr.textContent = c.group;
+        meta.appendChild(gr);
+      }
+      li.appendChild(meta);
+      li.addEventListener('click', ()=> playChannel(i));
+      channelListEl.appendChild(li);
+    });
+  }
+
+  function buildSeriesGroups(){
+    const map = new Map();
+    channels.forEach((c, idx)=>{
+      if(c.category !== 'series') return;
+      const info = parseEpisode(c.name);
+      const showRaw = (info && info.show) ? info.show : (c.group || c.name);
+      const show = showRaw.replace(/[\s\-\|:]+$/,'').trim() || c.name;
+      const key = show.toLowerCase();
+      if(!map.has(key)) map.set(key, {show, episodes:[]});
+      map.get(key).episodes.push({
+        idx,
+        season: info ? info.season : null,
+        episode: info ? info.episode : null,
+        title: (info && info.title) ? info.title : c.name,
+        raw: c
+      });
+    });
+    map.forEach(g=>{
+      g.episodes.sort((a,b)=>{
+        const as = a.season==null ? 999 : a.season, bs = b.season==null ? 999 : b.season;
+        if(as!==bs) return as-bs;
+        const ae = a.episode==null ? 999 : a.episode, be = b.episode==null ? 999 : b.episode;
+        return ae-be;
+      });
+    });
+    return Array.from(map.values()).sort((a,b)=> a.show.localeCompare(b.show,'es'));
+  }
+
+  function renderSeriesList(q){
+    const groups = buildSeriesGroups().filter(g=>{
+      if(!q) return true;
+      if(g.show.toLowerCase().includes(q)) return true;
+      return g.episodes.some(ep => ep.title.toLowerCase().includes(q));
+    });
+
+    if(groups.length === 0){
+      const li = document.createElement('li');
+      li.className = 'empty-list';
+      const total = channels.filter(c=>c.category==='series').length;
+      li.innerHTML = total === 0
+        ? 'No hay <b>series</b> todavía. Cargá una lista en <b>Admin</b> — los episodios con formato <code>S01E02</code> o <code>1x02</code> se agrupan automáticamente.'
+        : 'Sin resultados para esa búsqueda.';
+      channelListEl.appendChild(li);
+      return;
+    }
+
+    groups.forEach(g=>{
+      const key = g.show.toLowerCase();
+      const block = document.createElement('li');
+      block.className = 'show-block';
+
+      const header = document.createElement('div');
+      header.className = 'show-header' + (expandedShows.has(key) ? ' open' : '');
+      const chev = document.createElement('span');
+      chev.className = 'chev';
+      chev.textContent = '▸';
+      const sname = document.createElement('span');
+      sname.className = 'sname';
+      sname.textContent = g.show;
+      const ecount = document.createElement('span');
+      ecount.className = 'ecount';
+      ecount.textContent = g.episodes.length + (g.episodes.length===1 ? ' ep' : ' eps');
+      header.appendChild(chev);
+      header.appendChild(sname);
+      header.appendChild(ecount);
+      header.addEventListener('click', ()=>{
+        if(expandedShows.has(key)) expandedShows.delete(key); else expandedShows.add(key);
+        renderChannelList();
+      });
+      block.appendChild(header);
+
+      if(expandedShows.has(key)){
+        const ul = document.createElement('ul');
+        ul.className = 'episode-list';
+        g.episodes.forEach(ep=>{
+          const li = document.createElement('li');
+          li.className = 'episode-item' + (currentIndex===ep.idx ? ' playing' : '');
+          const se = document.createElement('span');
+          se.className = 'se';
+          se.textContent = (ep.season!=null && ep.episode!=null)
+            ? ('T'+String(ep.season).padStart(2,'0')+'E'+String(ep.episode).padStart(2,'0'))
+            : '·';
+          const et = document.createElement('span');
+          et.className = 'etitle';
+          et.textContent = ep.title || ep.raw.name;
+          li.appendChild(se);
+          li.appendChild(et);
+          li.addEventListener('click', ()=> playChannel(ep.idx));
+          ul.appendChild(li);
+        });
+        block.appendChild(ul);
+      }
+
+      channelListEl.appendChild(block);
+    });
+  }
+
+  searchInput.addEventListener('input', renderChannelList);
+
+  // ---------- player logic ----------
+  function setStatus(text, mode){
+    statusText.textContent = text;
+    statusBadge.className = 'badge' + (mode ? ' ' + mode : '');
+  }
+
+  function resetPlayer(){
+    if(hls){ hls.destroy(); hls = null; }
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    video.style.display = 'none';
+    placeholder.style.display = '';
+    npName.textContent = 'Sin señal';
+    npUrl.textContent = '';
+    npCat.style.display = 'none';
+    setStatus('Inactivo', '');
+    currentIndex = -1;
+  }
+
+  function playChannel(index){
+    const c = channels[index];
+    if(!c) return;
+    currentIndex = index;
+    renderChannelList();
+
+    placeholder.style.display = 'none';
+    video.style.display = '';
+    npName.textContent = c.name;
+    npUrl.textContent = c.url;
+    npCat.style.display = '';
+    npCat.textContent = CAT_LABEL[c.category] || 'En vivo';
+    setStatus('Sintonizando…', '');
+
+    if(hls){ hls.destroy(); hls = null; }
+
+    const isHls = /\.m3u8($|\?)/i.test(c.url);
+
+    if(isHls && window.Hls && Hls.isSupported()){
+      hls = new Hls();
+      hls.loadSource(c.url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
+        video.play().catch(()=>{});
+      });
+      hls.on(Hls.Events.ERROR, (evt, data)=>{
+        if(data.fatal){
+          setStatus('Error de reproducción', 'err');
+        }
+      });
+    } else {
+      video.src = c.url;
+      video.play().catch(()=>{});
+    }
+  }
+
+  video.addEventListener('playing', ()=> setStatus(channels[currentIndex] && channels[currentIndex].category==='live' ? 'En vivo' : 'Reproduciendo', 'live'));
+  video.addEventListener('waiting', ()=> setStatus('Cargando…', ''));
+  video.addEventListener('pause', ()=> setStatus('Pausado', ''));
+  video.addEventListener('error', ()=> setStatus('No se pudo reproducir esta fuente', 'err'));
+
+  // ---------- init ----------
+  resetPlayer();
+  loadPersisted();
+})();
+</script>
+</body>
+</html>
